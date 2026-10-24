@@ -1,0 +1,36 @@
+[
+  {
+    "collection": "services",
+    "as": "s",
+    "data": {
+      "name": "Учебная услуга",
+      "currency": "KZT",
+      "price": "5000",
+      "setup": "2500",
+      "minimum": 1,
+      "maximum": 10,
+      "scope": "Только синтетический пример.",
+      "status": "published"
+    }
+  },
+  {
+    "collection": "quotes",
+    "data": {
+      "service": "$s",
+      "quantity": 2,
+      "contact": "",
+      "status": "quoted"
+    },
+    "expect": "Предварительно: 12500.00 KZT"
+  },
+  {
+    "collection": "quotes",
+    "error": "диапазона",
+    "data": {
+      "service": "$s",
+      "quantity": 20,
+      "contact": "",
+      "status": "quoted"
+    }
+  }
+]

@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-24",
+  "version": "0.1.0",
+  "runtime": "Node 24.19.0",
+  "tests": {
+    "slug": "quotegate",
+    "tests": 5,
+    "pass": true,
+    "runtime": "v24.19.0"
+  },
+  "browser": {
+    "slug": "quotegate",
+    "status": "ui_workflow_passed",
+    "saved_operations": 2,
+    "labels": {
+      "s": "Учебная услуга"
+    },
+    "reference": 100
+  },
+  "screens": [
+    "../.impeccable/review/desktop.jpg",
+    "../.impeccable/review/mobile.jpg",
+    "../.impeccable/review/user-1280.jpg"
+  ],
+  "limitations": "Не заказ, не публичная оферта и не платёж; налоговые и договорные условия согласуются отдельно.",
+  "deployment": "source repository; server checked locally only",
+  "security_audit": false,
+  "customer_validation": false,
+  "review": {
+    "disposition": "ship",
+    "scope": "Reviewer scored the listed fixes resolved; not a new whole-surface/security audit",
+    "record": "verdict-pass.md"
+  },
+  "correctionBrowser": {
+    "slug": "quotegate",
+    "query": "Учебная услуга",
+    "result": "visible_label_and_no_results_recovery_passed"
+  }
+}

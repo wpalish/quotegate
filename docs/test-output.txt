@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: QuoteGate: complete original workflow, calculation and rejected invalid transition
+ok 1 - QuoteGate: complete original workflow, calculation and rejected invalid transition
+  ---
+  duration_ms: 2.535459
+  type: 'test'
+  ...
+# Subtest: real file restart, optimistic conflict and validated restore into an empty database
+ok 2 - real file restart, optimistic conflict and validated restore into an empty database
+  ---
+  duration_ms: 3.049375
+  type: 'test'
+  ...
+# Subtest: HTTP prevents anonymous reads and cross-origin/CSRF writes while authenticated workflow saves
+ok 3 - HTTP prevents anonymous reads and cross-origin/CSRF writes while authenticated workflow saves
+  ---
+  duration_ms: 73.661
+  type: 'test'
+  ...
+# Subtest: published public form saves a validated submission without exposing private workspace
+ok 4 - published public form saves a validated submission without exposing private workspace
+  ---
+  duration_ms: 4.81575
+  type: 'test'
+  ...
+# Subtest: two products on one host use isolated session cookies and preserve both logins
+ok 5 - two products on one host use isolated session cookies and preserve both logins
+  ---
+  duration_ms: 87.469333
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 217.869125
