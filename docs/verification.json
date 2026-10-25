@@ -4,7 +4,7 @@
   "runtime": "Node 24.19.0",
   "tests": {
     "slug": "quotegate",
-    "tests": 5,
+    "tests": 8,
     "pass": true,
     "runtime": "v24.19.0"
   },
@@ -35,5 +35,10 @@
     "slug": "quotegate",
     "query": "Учебная услуга",
     "result": "visible_label_and_no_results_recovery_passed"
+  },
+  "followup": {
+    "date": "2026-10-25",
+    "change": "Reject new archived-service quotes and preserve archived selection in immutable history editor;snapshot preservation already worked",
+    "evidence": "docs/archive-verification.json"
   }
 }

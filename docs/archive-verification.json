@@ -1,0 +1,163 @@
+{
+  "date": "2026-10-25",
+  "product": "quotegate",
+  "baseline_commit": "ad4dc860a57fc26363a1027c0407a85d77784be1",
+  "before_fix": {
+    "internal_new_quote_on_archived_published_service_accepted": true,
+    "public_route_already_closed": true,
+    "selector": {
+      "disabled": false,
+      "missing": true,
+      "options": [
+        "Выберите значение",
+        "SYNTHETIC live rate"
+      ],
+      "value": ""
+    },
+    "regression_tests_initially_failed": 2,
+    "existing_snapshot_lifecycle_control_passed_baseline": true,
+    "baseline_log": "baseline-regressions.txt"
+  },
+  "policy": [
+    "New quote requires nonarchived published service and allowed quantity",
+    "Historical quote retains total and complete price snapshot after service repricing/currency/range/archive changes;this already worked",
+    "Current archived service remains selected with Archive label;immutable service/quantity/contact read only in existing editor,editable in new form",
+    "Status-only history review/restore remains valid;old data not silently repaired"
+  ],
+  "tests": {
+    "passed": 8,
+    "failed": 0,
+    "runtime": "v24.19.0",
+    "log": "docs/test-output.txt",
+    "lifecycle": "tests/archive.test.js",
+    "coverage": [
+      "new quote for each status rejected against archived still-published service;all state/audit preserved",
+      "old250KZT snapshot retained after7USD repricing/new range/archive with status edits",
+      "real file restart and empty restore retain history and immutable input guards",
+      "authenticated new archived quote refused and existing review accepted;public GET/stale POST already closed",
+      "original public success/auth/CSRF/Origin/cookie/conflict checks retained"
+    ]
+  },
+  "browser": {
+    "data": "synthetic only,localhost8835",
+    "existing_editor": {
+      "service": {
+        "disabled": true,
+        "options": [
+          "Выберите значение",
+          "SYNTHETIC new USD rate · Архив",
+          "SYNTHETIC live rate"
+        ],
+        "selected": "SYNTHETIC new USD rate · Архив",
+        "value": "3c0041ae-75b1-40fe-b557-3c08b0813e53"
+      },
+      "quantity": {
+        "readOnly": true,
+        "value": "2"
+      },
+      "contact": {
+        "readOnly": true,
+        "value": ""
+      }
+    },
+    "new_editor": {
+      "service": {
+        "disabled": false,
+        "options": [
+          "Выберите значение",
+          "SYNTHETIC live rate"
+        ]
+      },
+      "quantity": {
+        "readOnly": false
+      },
+      "contact": {
+        "readOnly": false
+      }
+    },
+    "http_guards": {
+      "all8_rejections_preserved_entire_state_and_audit": true,
+      "new_archive_guards": 3,
+      "existing_immutable_and_public_controls": 5,
+      "revision": 8,
+      "audit_events": 8,
+      "results": [
+        {
+          "kind": "new_quoted",
+          "status": 400,
+          "error": "Новый расчёт недоступен для архивной услуги."
+        },
+        {
+          "kind": "new_reviewed",
+          "status": 400,
+          "error": "Новый расчёт недоступен для архивной услуги."
+        },
+        {
+          "kind": "new_declined",
+          "status": 400,
+          "error": "Новый расчёт недоступен для архивной услуги."
+        },
+        {
+          "kind": "existing_immutable_service",
+          "status": 400,
+          "error": "Утверждённую запись нельзя менять. Создайте новую версию."
+        },
+        {
+          "kind": "existing_immutable_quantity",
+          "status": 400,
+          "error": "Утверждённую запись нельзя менять. Создайте новую версию."
+        },
+        {
+          "kind": "existing_immutable_contact",
+          "status": 400,
+          "error": "Утверждённую запись нельзя менять. Создайте новую версию."
+        },
+        {
+          "kind": "closed_public_GET",
+          "status": 400,
+          "error": "Форма не найдена или ещё не опубликована."
+        },
+        {
+          "kind": "closed_public_POST",
+          "status": 400,
+          "error": "Форма не найдена или ещё не опубликована."
+        }
+      ]
+    },
+    "saved_and_reloaded": {
+      "selected_archived_service_restored": true,
+      "existing_immutable_inputs_read_only": true,
+      "new_form_still_editable_and_excludes_archives": true,
+      "old_total_250_KZT_and_full_snapshot_unchanged": true,
+      "current_archived_service_is_new_USD_rate": true,
+      "status_review_saved": true,
+      "other_quote_260_KZT_unchanged": true,
+      "new_public_quote_340_KZT_saved": true,
+      "public_archived_route_rejected": true,
+      "reload_three_quotes": true,
+      "revision": 10,
+      "audit_events": 10
+    },
+    "screens": [
+      "docs/before-missing-service.jpg",
+      "docs/archive-selected.jpg",
+      "docs/live-quote-saved.jpg",
+      "docs/closed-public-service.jpg",
+      "docs/history-and-live-quotes.jpg"
+    ]
+  },
+  "runtime": {
+    "previous_main_pid": 85860,
+    "main_pid": 88044,
+    "restarted": true,
+    "owned_cwd_command_checked": true,
+    "evidence": "work/program/runtime-reloads/quotegate-archive-20261025",
+    "saved_workspace_payload_revision_audit_unchanged": 18
+  },
+  "limits": [
+    "Preliminary estimate is not an order,public offer,contract,payment or confirmed customer discussion",
+    "Snapshot preservation already worked;not newly invented or fixed by this followup",
+    "ReadOnly field metadata changed,storage schema unchanged;server still enforces immutability independently",
+    "No fresh whole-interface/security audit,hosted SaaS or customer acceptance"
+  ]
+}

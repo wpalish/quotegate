@@ -48,9 +48,9 @@ const definition = {
       { writeRole: "admin", publicLinks: true },
     ),
     C("quotes", "Расчёты-заявки", [
-      R("service", "Услуга", "services"),
-      F("quantity", "Единиц", "integer", { min: 1, max: 100000 }),
-      F("contact", "Контакт для ответа", "email", { required: false }),
+      R("service", "Услуга", "services", { readOnly: true }),
+      F("quantity", "Единиц", "integer", { min: 1, max: 100000, readOnly: true }),
+      F("contact", "Контакт для ответа", "email", { required: false, readOnly: true }),
       S("status", "Состояние", [
         ["quoted", "Расчёт создан"],
         ["reviewed", "Обсуждён"],
@@ -64,13 +64,15 @@ const definition = {
     for (const q of rows(state, "quotes")) {
       const s = byId(state, "services", q.service),
         old = changed(before, "quotes", q.id);
-      if (!old)
+      if (!old) {
+        required(!s.archived, "Новый расчёт недоступен для архивной услуги.");
         required(
           s.status === "published" &&
             q.quantity >= s.minimum &&
             q.quantity <= s.maximum,
           "Количество вне опубликованного диапазона.",
         );
+      }
       required(
         Number.isSafeInteger(q.total) && q.total >= 0,
         "Неверный итог расчёта.",
