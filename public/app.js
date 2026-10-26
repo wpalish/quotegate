@@ -1,3 +1,12 @@
+import {
+  renderWorkspace,
+  renderProductRecords,
+  decorateEditor,
+  decoratePublic,
+  parseHashRoute,
+  createRouteGuard,
+} from "./product-view.js";
+const routeGuard = createRouteGuard();
 const screen = document.getElementById("screen"),
   notice = document.getElementById("notice"),
   navigation = document.getElementById("navigation");
@@ -20,14 +29,21 @@ function message(text, error = false) {
   if (error) notice.focus();
 }
 async function run(fn, button) {
+  const routeTicket = routeGuard.current();
   message("");
-  if (button) button.disabled = true;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
   try {
     await fn();
   } catch (e) {
-    message(e.message, true);
+    if (routeGuard.isCurrent(routeTicket)) message(e.message, true);
   } finally {
-    if (button) button.disabled = false;
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
   }
 }
 function button(label, fn, cls = "secondary") {
@@ -37,6 +53,7 @@ function button(label, fn, cls = "secondary") {
   return b;
 }
 async function api(path, method = "GET", data) {
+  const routeTicket = routeGuard.current();
   const r = await fetch(path, {
     method,
     credentials: "same-origin",
@@ -48,7 +65,11 @@ async function api(path, method = "GET", data) {
   });
   const value = await r.json();
   if (!r.ok) {
-    if (r.status === 401 && path !== "/api/login") {
+    if (
+      r.status === 401 &&
+      path !== "/api/login" &&
+      routeGuard.isCurrent(routeTicket)
+    ) {
       user = null;
       state = null;
       login();
@@ -94,7 +115,10 @@ function chrome() {
   for (const collection of config.collections) {
     const b = button(collection.title, () => {
       active = collection.key;
+      query = "";
+      showArchived = false;
       render();
+      focusScreenHeading();
     });
     if (active === collection.key) b.setAttribute("aria-current", "page");
     navigation.append(b);
@@ -110,6 +134,8 @@ function chrome() {
   );
 }
 function login() {
+  const loginRoute = routeGuard.current();
+  screen.dataset.view = "login";
   chrome();
   screen.replaceChildren(E("h1", config.title), E("p", config.description));
   const f = E("form", undefined, "panel");
@@ -133,74 +159,53 @@ function login() {
   f.addEventListener("submit", (event) => {
     event.preventDefault();
     run(async () => {
-      user = (
-        await api("/api/login", "POST", Object.fromEntries(new FormData(f)))
-      ).user;
-      await load();
+      const session = await api(
+        "/api/login",
+        "POST",
+        Object.fromEntries(new FormData(f)),
+      );
+      if (!routeGuard.isCurrent(loginRoute)) return;
+      user = session.user;
+      await load(loginRoute);
     }, submit);
   });
   screen.append(f);
 }
-async function load() {
-  state = await api("/api/state");
+async function load(routeTicket = routeGuard.current()) {
+  const loaded = await api("/api/state");
+  if (!routeGuard.isCurrent(routeTicket)) return;
+  state = loaded;
   active = active || config.collections[0].key;
   render();
 }
 function render() {
+  if (parseHashRoute(location.hash, []).kind === "public") return;
   chrome();
-  const c = config.collections.find((x) => x.key === active);
-  screen.replaceChildren(
-    E("h1", c.title),
-    E("p", c.description || config.description),
-  );
-  const controls = E("div", undefined, "actions");
-  if (!c.createDisabled && (c.writeRole !== "admin" || user.role === "admin"))
-    controls.append(
-      button(c.addLabel || "Добавить запись", () => edit(c), "primary"),
-    );
-  controls.append(button("Обновить", load));
-  screen.append(controls);
-  const search = E("div", undefined, "search-tools");
-  const q = input(search, "search", "Поиск по записям", query, "search", false);
-  q.addEventListener("input", () => {
-    query = q.value;
-    renderRows();
+  screen.dataset.view = "workspace";
+  history.replaceState(null, "", "#section=" + encodeURIComponent(active));
+  renderWorkspace({
+    screen,
+    config,
+    state,
+    active,
+    user,
+    query,
+    showArchived,
+    E,
+    button,
+    input,
+    create: () => edit(config.collections.find((c) => c.key === active)),
+    refresh: load,
+    search: (value) => {
+      query = value;
+      renderRows();
+    },
+    archive: (value) => {
+      showArchived = value;
+      renderRows();
+    },
   });
-  const archivedLabel = E("label", "Показать архив"),
-    toggle = E("input");
-  toggle.type = "checkbox";
-  toggle.checked = showArchived;
-  toggle.style.width = "auto";
-  toggle.addEventListener("change", () => {
-    showArchived = toggle.checked;
-    renderRows();
-  });
-  archivedLabel.prepend(toggle);
-  search.append(archivedLabel);
-  screen.append(search);
-  const holder = E("section");
-  holder.id = "records";
-  screen.append(holder);
   renderRows();
-  const summary = E("section");
-  summary.append(E("h2", "Расчёт и контроль"));
-  for (const block of state.computed || []) {
-    const entry = E("div", undefined, "entry");
-    entry.append(E("h3", block.title));
-    for (const line of block.lines || []) entry.append(E("p", line));
-    summary.append(entry);
-  }
-  if (!state.computed?.length)
-    summary.append(
-      E("p", "Расчёт появится после сохранения записей.", "muted"),
-    );
-  screen.append(
-    summary,
-    E(
-      "small",
-      "Данные сохраняются на вашем сервере. Архив сохраняет историю. Снимайте резервные копии.",
-    ),
-  );
 }
 function displayValue(field, row) {
   const value = row[field.key];
@@ -237,83 +242,47 @@ function displayValue(field, row) {
 function renderRows() {
   const c = config.collections.find((x) => x.key === active),
     host = document.getElementById("records");
-  host.replaceChildren();
   const values = state.data[c.key].filter(
-    (x) =>
-      (showArchived || !x.archived) &&
+    (row) =>
+      (showArchived || !row.archived) &&
       (
-        JSON.stringify(x) +
+        JSON.stringify(row) +
         " " +
-        c.fields.map((field) => displayValue(field, x)).join(" ")
+        c.fields.map((field) => displayValue(field, row)).join(" ")
       )
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
   );
-  if (!values.length) {
-    host.append(
-      E(
-        "p",
-        "Записей по этому условию нет. Создайте первую запись или измените поиск.",
-        "muted",
-      ),
-    );
-    return;
-  }
-  const wrap = E("div", undefined, "table-wrap"),
-    table = E("table"),
-    head = E("thead"),
-    tr = E("tr");
-  wrap.tabIndex = 0;
-  wrap.setAttribute(
-    "aria-label",
-    "Таблица записей. Если столбцы не помещаются, прокрутите вправо.",
-  );
-  for (const field of c.fields.slice(0, 5)) tr.append(E("th", field.label));
-  tr.append(E("th", "Действия"));
-  head.append(tr);
-  table.append(head);
-  const body = E("tbody");
-  for (const row of values) {
-    const r = E("tr");
-    for (const field of c.fields.slice(0, 5)) {
-      let value = displayValue(field, row);
-      if (field.type === "answers") {
-        const cell = E("td");
-        const form = state.data.forms.find((f) => f.id === row.form);
-        const questions = (form?.questions || "")
-          .split("\n")
-          .filter((q) => q.trim());
-        JSON.parse(row[field.key]).forEach((answer, index) =>
-          cell.append(
-            E(
-              "p",
-              (questions[index] || "Ответ " + (index + 1)) + ": " + answer,
-            ),
-          ),
-        );
-        r.append(cell);
-      } else
-        r.append(
-          E("td", String(value ?? "—") + (row.archived ? " · Архив" : "")),
-        );
-    }
-    const actions = E("td");
-    actions.append(button("Открыть", () => edit(c, row)));
-    r.append(actions);
-    body.append(r);
-  }
-  table.append(body);
-  wrap.append(table);
-  host.append(
-    E(
-      "p",
-      "На узком экране прокрутите таблицу вправо: там остальные столбцы и действия.",
-      "table-hint",
-    ),
-    wrap,
-  );
+  renderProductRecords({
+    host,
+    config,
+    state,
+    active,
+    user,
+    values,
+    query,
+    showArchived,
+    E,
+    button,
+    edit: (row) => edit(c, row),
+    create: () => edit(c),
+    navigate: (key) => {
+      active = key;
+      query = "";
+      showArchived = false;
+      render();
+      focusScreenHeading();
+    },
+    clear: () => {
+      query = "";
+      showArchived = true;
+      render();
+    },
+  });
 }
 function edit(c, row) {
+  const editRevision = state.revision;
+  screen.dataset.view = "editor";
   screen.replaceChildren(
     E("h1", row ? "Изменить: " + c.title : c.addLabel || "Новая запись"),
     E(
@@ -440,7 +409,7 @@ function edit(c, row) {
           operation: "archive",
           collection: c.key,
           id: row.id,
-          revision: state.revision,
+          revision: editRevision,
         });
         render();
       }),
@@ -462,7 +431,7 @@ function edit(c, row) {
         operation: "save",
         collection: c.key,
         id: row?.id,
-        revision: state.revision,
+        revision: editRevision,
         data,
       });
       render();
@@ -470,6 +439,7 @@ function edit(c, row) {
     }, submit);
   });
   screen.append(form);
+  decorateEditor({ screen, form, c, row, state, user, E, button });
   if (row && config.collections.find((x) => x.key === active).publicLinks) {
     const link = E("a", "Открыть публичную форму");
     link.href = location.origin + "/#public=" + row.id;
@@ -490,8 +460,80 @@ function edit(c, row) {
     );
     screen.append(details);
   }
+  focusScreenHeading();
 }
+function focusScreenHeading() {
+  const heading = screen.querySelector("h1");
+  if (heading) {
+    heading.tabIndex = -1;
+    heading.focus();
+  }
+}
+function accountSessions(report) {
+  const panel = E('section', undefined, 'panel account-sessions'),
+    header = E('div', undefined, 'account-session-heading'),
+    refreshButton = E('button', 'Обновить сеансы', 'secondary'),
+    status = E('p', 'Загрузка аккаунтов и сеансов…', 'muted account-session-status'),
+    list = E('div', undefined, 'account-session-list');
+  refreshButton.type = 'button';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  header.append(E('h2', 'Аккаунты и сеансы'), refreshButton);
+  panel.append(header, E('p', 'Отзыв завершает вход в браузерах выбранного аккаунта. Для вашего аккаунта текущий сеанс всегда сохраняется. Пароли и роли здесь не меняются.', 'muted'), status, list);
+  screen.append(panel);
+  let requestNumber = 0;
+  const stamp = value => new Date(value).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  async function refresh() {
+    const current = ++requestNumber;
+    status.textContent = 'Обновление сведений о сеансах…';
+    try {
+      const result = await api('/api/accounts');
+      if (current !== requestNumber || !panel.isConnected) return;
+      list.replaceChildren();
+      for (const account of result.users) {
+        const row = E('article', undefined, 'account-session-row'),
+          detail = E('div'),
+          label = account.isCurrentUser ? 'Завершить другие сеансы' : 'Завершить все сеансы',
+          revoke = E('button', label, 'secondary');
+        detail.append(E('h3', account.name + (account.isCurrentUser ? ' · ваш аккаунт' : '')), E('p', (account.role === 'admin' ? 'Администратор' : 'Сотрудник') + ' · действующих сеансов: ' + account.activeSessions));
+        const expiry = !account.activeSessions ? 'Действующих сеансов нет.' : account.earliestExpiry === account.latestExpiry ? 'Истечение: ' + stamp(account.latestExpiry) : 'Истечение сеансов: от ' + stamp(account.earliestExpiry) + ' до ' + stamp(account.latestExpiry);
+        detail.append(E('small', expiry));
+        revoke.type = 'button';
+        revoke.setAttribute('aria-label', label + ': ' + account.name);
+        revoke.disabled = account.activeSessions <= (account.isCurrentUser ? 1 : 0);
+        revoke.addEventListener('click', () => run(async () => {
+          revoke.textContent = 'Завершение…';
+          try {
+            const result = await api('/api/accounts/revoke-sessions', 'POST', {username: account.name});
+            await confirmMutation('Завершено действующих сеансов: ' + result.revoked + ' · ' + result.username + (result.keptCurrent ? '. Ваш текущий сеанс сохранён.' : '.'));
+          } finally { revoke.textContent = label; }
+        }, revoke));
+        row.append(detail, revoke);
+        list.append(row);
+      }
+      status.textContent = 'Обновлено: ' + stamp(result.serverTime) + '. Ваш текущий сеанс истекает: ' + stamp(result.currentSessionExpires) + '.';
+    } catch (error) {
+      if (current === requestNumber && panel.isConnected) status.textContent = 'Не удалось загрузить сведения. Повторите кнопкой «Обновить сеансы».';
+      throw error;
+    }
+  }
+  async function confirmMutation(confirmation) {
+    // The write is committed; a read failure must not turn it into a failed write.
+    list.replaceChildren();
+    report(confirmation);
+    try { await refresh(); }
+    catch {
+      report(confirmation + ' Список аккаунтов и сеансов не обновлён. Нажмите «Обновить сеансы» или войдите снова.', true);
+    }
+  }
+  accountSessions.refresh = refresh;
+  accountSessions.afterMutation = confirmMutation;
+  refreshButton.addEventListener('click', () => run(refresh, refreshButton));
+  run(refresh, refreshButton);
+}
+
 function settings() {
+  screen.dataset.view = "settings";
   screen.replaceChildren(E("h1", "Данные и доступ"));
   const actions = E("div", undefined, "actions");
   actions.append(button("Вернуться", render));
@@ -502,6 +544,7 @@ function settings() {
     );
     return;
   }
+  accountSessions(message);
   screen.append(
     button("Скачать копию данных", async () =>
       download(config.slug + "-backup.json", await api("/api/backup")),
@@ -565,7 +608,7 @@ function settings() {
         role: "operator",
       });
       form.reset();
-      message("Сотрудник создан. Передайте пароль защищённым способом.");
+      await accountSessions.afterMutation("Сотрудник создан. Передайте пароль защищённым способом.");
     }, submit);
   });
   screen.append(
@@ -581,8 +624,13 @@ function settings() {
     }),
   );
 }
-async function publicView(id) {
-  const form = await api("/api/public/" + id);
+async function publicView(id, routeTicket = routeGuard.current()) {
+  screen.dataset.view = "public";
+  document.body.classList.add("public-page");
+  navigation.replaceChildren();
+  screen.replaceChildren(E("h1", "Открываем форму…"));
+  const form = await api("/api/public/" + encodeURIComponent(id));
+  if (!routeGuard.isCurrent(routeTicket)) return;
   document.getElementById("brand").textContent = config.title;
   document.title = form.title + " — " + config.title;
   screen.replaceChildren(E("h1", form.title), E("p", form.description));
@@ -603,23 +651,28 @@ async function publicView(id) {
       e.step = "1";
     }
   }
-  const submit = E("button", "Отправить");
+  const submit = E("button", "Получить сохранённый расчёт");
   submit.type = "submit";
   submit.classList.add("primary");
   f.append(E("div", undefined, "actions"));
   f.lastChild.append(submit);
   f.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!routeGuard.isCurrent(routeTicket)) return;
     run(async () => {
       const receipt = await api(
         "/api/public/" + id,
         "POST",
         Object.fromEntries(new FormData(f)),
       );
+      if (!routeGuard.isCurrent(routeTicket)) return;
       screen.replaceChildren(
         E("h1", "Заявка сохранена"),
         E("p", "Номер: " + receipt.id),
       );
+      const receiptHeading = screen.querySelector("h1");
+      receiptHeading.tabIndex = -1;
+      receiptHeading.focus();
       if (receipt.total)
         screen.append(
           E(
@@ -638,15 +691,63 @@ async function publicView(id) {
       "muted",
     ),
   );
+  decoratePublic({ screen, form: f, definition: form, E });
+}
+async function applyLocation() {
+  const routeTicket = routeGuard.next();
+  const route = parseHashRoute(
+    location.hash,
+    config.collections.map((c) => c.key),
+  );
+  message("");
+  screen.setAttribute("aria-busy", "true");
+  try {
+    if (route.kind === "public") {
+      await publicView(route.id, routeTicket);
+      if (routeGuard.isCurrent(routeTicket)) focusScreenHeading();
+      return;
+    }
+    document.body.classList.remove("public-page");
+    screen.dataset.view = "loading";
+    navigation.replaceChildren();
+    screen.replaceChildren(E("h1", "Открываем рабочий кабинет…"));
+    const session = await api("/api/session");
+    if (!routeGuard.isCurrent(routeTicket)) return;
+    user = session.user;
+    active = route.section || active || config.collections[0].key;
+    query = "";
+    showArchived = false;
+    if (user) await load(routeTicket);
+    else login();
+    if (routeGuard.isCurrent(routeTicket)) focusScreenHeading();
+  } catch (error) {
+    if (!routeGuard.isCurrent(routeTicket)) return;
+    screen.replaceChildren(
+      E(
+        "h1",
+        route.kind === "public"
+          ? "Форма недоступна"
+          : "Не удалось открыть кабинет",
+      ),
+      E("p", "Проверьте ссылку или повторите загрузку."),
+      button("Повторить загрузку", applyLocation),
+    );
+    message(error.message, true);
+  } finally {
+    if (routeGuard.isCurrent(routeTicket)) screen.removeAttribute("aria-busy");
+  }
 }
 run(async () => {
   config = await api("/api/config");
-  const id = location.hash.startsWith("#public=") ? location.hash.slice(8) : "";
-  if (id) {
-    await publicView(id);
-    return;
+  for (const [key, label] of Object.entries({
+    services: "Добавить услугу",
+    quotes: "Добавить расчёт-заявку",
+  })) {
+    const collection = config.collections.find((item) => item.key === key);
+    if (collection && !collection.addLabel) collection.addLabel = label;
   }
-  user = (await api("/api/session")).user;
-  if (user) await load();
-  else login();
+  window.addEventListener("hashchange", () => {
+    void applyLocation();
+  });
+  await applyLocation();
 });
